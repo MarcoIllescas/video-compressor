@@ -135,3 +135,82 @@ resource "aws_iam_role_policy" "policy_metadata" {
         ]
     })
 }
+
+# ------------------------------------------------------ #
+#                 Packing Lambda functions               #
+# ------------------------------------------------------ #
+data "archive_file" "zip_lambda_720p" {
+    type        = "zip"
+    source_dir  = "../src/lambda_720p"
+    output_path = "lambda_720p.zip"
+}
+
+data "archive_file" "zip_lambda_480p" {
+    type        = "zip"
+    source_dir  = "../src/lambda_480p"
+    output_path = "lambda_480p.zip"
+}
+
+data "archive_file" "zip_lambda_metadata" {
+    type        = "zip"
+    source_dir  = "../src/lambda_metadata"
+    output_path = "lambda_metadata.zip"
+}
+
+# ------------------------------------------------------ #
+#                 Creating Lambda functions              #
+# ------------------------------------------------------ #
+resource "aws_lambda_function" "lambda_720p" {
+    filename         = data.archive_file.zip_lambda_720p.output_path
+    source_code_hash = data.archive_file.zip_lambda_720p.output_base64sha256
+    function_name    = "video-convert-720p"
+    role             = aws_iam_role.lambda_role_720p.arn
+    handler          = "app.handler"
+    runtime          = "python3.9"
+    timeout          = 60
+    memory_size      = 512
+
+    environment {
+        variables = {
+            BUCKET_OUT       = aws_s3_bucket.output_videos_720p.bucket
+            RESOLUTION       = "1280x720"
+            AWS_ENDPOINT_URL = "http://localhost:4566"
+        }
+    }
+}
+
+resource "aws_lambda_function" "lambda_480p" {
+    filename         = data.archive_file.zip_lambda_480p.output_path
+    source_code_hash = data.archive_file.zip_lambda_480p.output_base64sha256
+    function_name    = "video-convert-480p"
+    role             = aws_iam_role.lambda_role_480p.arn
+    handler          = "app.handler"
+    runtime          = "python3.9"
+    timeout          = 60
+    memory_size      = 512
+
+    environment {
+        variables = {
+            BUCKET_OUT       = aws_s3_bucket.output_videos_480p.bucket
+            RESOLUTION       = "854x480"
+            AWS_ENDPOINT_URL = "http://localhost:4566"
+        }
+    }
+}
+
+resource "aws_lambda_function" "lambda_metadata" {
+    filename         = data.archive_file.zip_lambda_metadata.output_path
+    source_code_hash = data.archive_file.zip_lambda_metadata.output_base64sha256
+    function_name    = "save-video-metadata"
+    role             = aws_iam_role.metadata_role.arn
+    handler          = "app.handler"
+    runtime          = "python3.9"
+    timeout          = 10
+    memory_size      = 128
+
+    environment {
+        variables = {
+            AWS_ENDPOINT_URL = "http://localhost:4566"
+        }
+    }
+}
