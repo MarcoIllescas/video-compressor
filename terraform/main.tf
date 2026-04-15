@@ -136,6 +136,31 @@ resource "aws_iam_role_policy" "policy_metadata" {
     })
 }
 
+#                   Step Function role                   #
+resource "aws_iam_role" "step_function_role" {
+    name                = "step-function-role"
+    assume_role_policy  = data.aws_iam_policy_document.step_function_assume_role_policy.json
+}
+
+resource "aws_iam_role_policy" "step_function_policy" {
+    name = "step-function-lambda-invoke-policy"
+    role = aws_iam_role.step_function_role.id
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+            {
+                Action = ["lambda:InvokeFunction"]
+                Effect = "Allow"
+                Resource = [
+                    aws_lambda_function.lambda_720p.arn,
+                    aws_lambda_function.lambda_480p.arn,
+                    aws_lambda_function.lambda_metadata.arn
+                ]
+            }
+        ]
+    })
+}
+
 # ------------------------------------------------------ #
 #                 Packing Lambda functions               #
 # ------------------------------------------------------ #
@@ -213,4 +238,49 @@ resource "aws_lambda_function" "lambda_metadata" {
             AWS_ENDPOINT_URL = "http://localhost:4566"
         }
     }
+}
+
+# ------------------------------------------------------ #
+#                 Creating State Machine                 #
+# ------------------------------------------------------ #
+resource "aws_sfn_state_machine" "video_pipeline_sfn" {
+    name     = "video-processing-pipeline"
+    role_arn = aws_iam_role.step_function_role.arn
+
+    definition = jsonencode({
+        StartAt = "ParallelProcessing"
+        States = {
+            "ParallelProcessing" = {
+                Type = "Parallel"
+                Next = "SaveMetadata"
+                Branches = [
+                    {
+                        StartAt = "ConvertTo720p"
+                        States = {
+                            "ConvertTo720p" = {
+                                Type = "Task"
+                                Resource = aws_lambda_function.lambda_720p.arn
+                                End = true
+                            }
+                        }
+                    },
+                    {
+                        StartAt = "ConvertTo480p"
+                        States = {
+                            "ConvertTo480p" = {
+                                Type = "Task"
+                                Resource = aws_lambda_function.lambda_480p.arn
+                                End = true
+                            }
+                        }
+                    }
+                ]
+            },
+            "SaveMetadata" = {
+                Type = "Task"
+                Resource = aws_lambda_function.lambda_metadata.arn
+                End = true
+            }
+        }
+    })
 }
