@@ -13,6 +13,9 @@ __pycache__/
 *.tfstate.backup
 crash.log
 
+# LocalStack
+localstack_data/
+
 # IDE & System
 .vscode/
 .idea/
