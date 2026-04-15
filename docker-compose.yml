@@ -3,8 +3,8 @@ services:
     container_name: localstack-video-pipeline
     image: localstack/localstack:latest
     ports:
-      - "127.0.0.1:4566:4566"
-      - "127.0.0.1:4510-4559:4510-4559"
+      - "127.0.0.1:4566:4566"             # LocalStack Gateway
+      - "127.0.0.1:4510-4559:4510-4559"   # External services (e.g., S3, DynamoDB, etc.)
     env_file:
       - .env
     volumes:
