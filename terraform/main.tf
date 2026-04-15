@@ -95,7 +95,7 @@ resource "aws_iam_role_policy" "policy_lambda_480p" {
             {
                 Action = ["s3:GetObject"]
                 Effect = "Allow"
-                Resource = "${aws_s3_bucket.output_videos_720p.arn}/*"
+                Resource = "${aws_s3_bucket.input_videos_1080p.arn}/*"
             },
             {
                 Action = ["s3:PutObject"]
