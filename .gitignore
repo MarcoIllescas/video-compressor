@@ -16,6 +16,10 @@ crash.log
 # LocalStack
 localstack_data/
 
+# FFmpeg
+src/lambda_720p/ffmpeg
+src/lambda_480p/ffmpeg
+
 # IDE & System
 .vscode/
 .idea/
