@@ -2,7 +2,7 @@ import os
 import subprocess
 import boto3
 
-s3 = boto3.client('s3', endpoint_url=os.environ.get('S3_ENDPOINT_URL'))
+s3 = boto3.client('s3', endpoint_url=os.environ.get('AWS_ENDPOINT_URL'))
 
 def handler(event, context):
     # 1. Get data event

@@ -6,7 +6,7 @@ dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('AWS_ENDPOINT_
 s3 = boto3.client('s3', endpoint_url=os.environ.get('AWS_ENDPOINT_URL'))
 
 def handler(event, context):
-    table = dynamodb.Table('VideoMetadata')
+    table = dynamodb.Table('video_metadata')
     video_id = event[0]['key']
 
     metadata = {
