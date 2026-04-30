@@ -258,7 +258,8 @@ resource "aws_iam_role_policy" "step_function_policy" {
                 Resource = [
                     aws_lambda_function.lambda_720p.arn,
                     aws_lambda_function.lambda_480p.arn,
-                    aws_lambda_function.lambda_metadata.arn
+                    aws_lambda_function.lambda_metadata.arn,
+                    aws_lambda_function.lambda_notification.arn
                 ]
             }
         ]
@@ -373,7 +374,6 @@ resource "aws_lambda_function" "lambda_720p" {
         variables = {
             BUCKET_OUT       = aws_s3_bucket.output_videos_720p.bucket
             RESOLUTION       = "1280x720"
-            AWS_ENDPOINT_URL = "http://localhost:4566"
         }
     }
 }
@@ -392,7 +392,6 @@ resource "aws_lambda_function" "lambda_480p" {
         variables = {
             BUCKET_OUT       = aws_s3_bucket.output_videos_480p.bucket
             RESOLUTION       = "854x480"
-            AWS_ENDPOINT_URL = "http://localhost:4566"
         }
     }
 }
@@ -406,12 +405,6 @@ resource "aws_lambda_function" "lambda_metadata" {
     runtime          = "python3.9"
     timeout          = 10
     memory_size      = 128
-
-    environment {
-        variables = {
-            AWS_ENDPOINT_URL = "http://localhost:4566"
-        }
-    }
 }
 
 resource "aws_lambda_function" "lambda_trigger" {
@@ -425,7 +418,6 @@ resource "aws_lambda_function" "lambda_trigger" {
     environment {
         variables = {
             STATE_MACHINE_ARN = aws_sfn_state_machine.video_pipeline_sfn.arn
-            AWS_ENDPOINT_URL = "http://localhost:4566"
         }
     }
 }
@@ -441,7 +433,6 @@ resource "aws_lambda_function" "lambda_notification" {
     environment {
         variables = {
             SNS_TOPIC_ARN    = aws_sns_topic.video_pipeline_alerts.arn
-            AWS_ENDPOINT_URL = "http://localhost:4566"
         }
     }
 }
