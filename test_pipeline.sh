@@ -6,6 +6,11 @@
 # Stop the script if any command fails
 set -e
 
+# AWS Configuration for LocalStack
+export AWS_ACCESS_KEY_ID="test"
+export AWS_SECRET_ACCESS_KEY="test"
+export AWS_DEFAULT_REGION="us-east-1"
+
 echo "Phase 1: Deploy infrastructure using Terraform..."
 cd terraform
 terraform init
@@ -36,7 +41,7 @@ sleep 30
 
 echo ""
 echo "Phase 5: Check the output in DynamoDB..."
-aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name $TABLE_NAME --query "Items[*].[video_id.S, formats.L[*].M.resolution.S]" --output text
+aws --endpoint-url=http://localhost:4566 --region us-east-1 dynamodb scan --table-name $TABLE_NAME --query "Items[*].[video_id.S, formats.L[*].M.resolution.S]" --output text
 
 echo ""
 echo "Test completed successfully. The pipeline is working as expected."

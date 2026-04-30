@@ -268,7 +268,7 @@ resource "aws_iam_role_policy" "step_function_policy" {
 #                       Trigger role                     #
 resource "aws_iam_role" "trigger_role" {
     name                = "trigger-role"
-    assume_role_policy  = data.aws_iam_policy_document.trigger_assume_role_policy.json
+    assume_role_policy  = data.aws_iam_policy_document.lambda_assume_role_policy.json
 }
 
 resource "aws_iam_role_policy" "policy_trigger" {
@@ -307,7 +307,7 @@ resource "aws_iam_role_policy" "policy_trigger_sqs" {
 #                    Notification role                   #
 resource "aws_iam_role" "role_notification" {
     name               = "role-lambda-notification"
-    assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+    assume_role_policy = data.aws_iam_policy_document.lambda_assume_role_policy.json
 }
 
 resource "aws_iam_role_policy" "policy_notification" {

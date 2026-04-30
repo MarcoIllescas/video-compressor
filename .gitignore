@@ -20,6 +20,13 @@ localstack_data/
 src/lambda_720p/ffmpeg
 src/lambda_480p/ffmpeg
 
+# Video files
+*.mp4
+*.mov
+
+# Zip files
+*.zip
+
 # IDE & System
 .vscode/
 .idea/
