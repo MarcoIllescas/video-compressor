@@ -2,7 +2,7 @@ import os
 import json
 import boto3
 
-sfn = boto3.client('stepfunctions', end_url=os.environ.get('AWS_ENDPOINT_URL'))
+sfn = boto3.client('stepfunctions', endpoint_url=os.environ.get('AWS_ENDPOINT_URL'))
 STATE_MACHINE_ARN = os.environ['STATE_MACHINE_ARN']
 
 def handler(event, context):

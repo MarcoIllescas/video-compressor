@@ -8,7 +8,7 @@ def handler(event, context):
     # 1. Get data event
     bucket_in = event['bucket_in']
     key_in = event['key_in']
-    bucket_out = event['BUCKET_OUT']
+    bucket_out = os.environ['BUCKET_OUT']
     resolution = os.environ['RESOLUTION']
 
     download_path = f"/tmp/{key_in}"
@@ -19,7 +19,7 @@ def handler(event, context):
 
     # 3. Process the video using ffmpeg
     command = [
-        'ffmpeg', '-i', download_path,
+        './ffmpeg', '-i', download_path,
         '-vf', f'scale={resolution}',
         '-c:v', 'libx264', '-crf', '28', '-preset', 'veryfast',
         '-y', output_path

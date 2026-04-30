@@ -36,7 +36,7 @@ sleep 30
 
 echo ""
 echo "Phase 5: Check the output in DynamoDB..."
-aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name $TABLE_NAME --query "Items[*].[videoId.S, formats.L[*].M.res.S]" --output text
+aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name $TABLE_NAME --query "Items[*].[video_id.S, formats.L[*].M.resolution.S]" --output text
 
 echo ""
 echo "Test completed successfully. The pipeline is working as expected."

@@ -67,7 +67,7 @@ resource "aws_sns_topic_policy" "allow_s3_to_sns" {
             Resource = aws_sns_topic.video_ingest_fanout.arn
             Condition = {
                 ArnLike = {
-                    "aws:SourceArn" = aws_s3_bucket.input_videos_1080p
+                    "aws:SourceArn" = aws_s3_bucket.input_videos_1080p.arn
                 }
             }
         }]
@@ -136,6 +136,27 @@ resource "aws_lambda_event_source_mapping" "sqs_to_lambda" {
 # ------------------------------------------------------ #
 #                         IAM Roles                      #
 # ------------------------------------------------------ #
+data "aws_iam_policy_document" "lambda_assume_role_policy" {
+    statement {
+        effect  = "Allow"
+        actions = ["sts:AssumeRole"]
+        principals {
+            type        = "Service"
+            identifiers = ["lambda.amazonaws.com"]
+        }
+    }
+}
+
+data "aws_iam_policy_document" "step_function_assume_role_policy" {
+    statement {
+        effect  = "Allow"
+        actions = ["sts:AssumeRole"]
+        principals {
+            type        = "Service"
+            identifiers = ["states.amazonaws.com"]
+        }
+    }
+}
 
 #             Lambda role for 720p processing            #
 resource "aws_iam_role" "lambda_role_720p" {
