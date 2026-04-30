@@ -4,6 +4,22 @@ variable "aws_region" {
     default     = "us-east-1"
 }
 
+variable "aws_access_key" {
+    type    = string
+    default = "value"
+}
+
+variable "aws_secret_key" {
+    type    = string
+    default = "value"
+}
+
+variable "use_localstack" {
+    description = "Whether to use LocalStack for testing."
+    type        = bool
+    default     = true
+}
+
 variable "localstack_endpoint" {
     description = "The endpoint URL for LocalStack services."
     type        = string

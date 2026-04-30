@@ -1,21 +1,21 @@
 provider "aws" {
-    access_key = "test"
-    secret_key = "test"
+    access_key = var.use_localstack ? "test" : var.aws_access_key
+    secret_key = var.use_localstack ? "test" : var.aws_secret_key
     region     = "us-east-1"
 
-    # Localstack configuration
-    s3_use_path_style = true
-    skip_credentials_validation = true
-    skip_metadata_api_check = true
-    skip_requesting_account_id = true
+    s3_use_path_style           = true
+    skip_credentials_validation = var.use_localstack
+    skip_metadata_api_check     = var.use_localstack
+    skip_requesting_account_id  = var.use_localstack
 
     endpoints {
-        s3              = "http://localhost:4566"
-        dynamodb        = "http://localhost:4566"
-        lambda          = "http://localhost:4566"
-        stepfunctions   = "http://localhost:4566"
-        iam             = "http://localhost:4566"
-        events          = "http://localhost:4566"
+        s3              = var.use_localstack ? "http://localhost:4566" : null
+        dynamodb        = var.use_localstack ? "http://localhost:4566" : null
+        lambda          = var.use_localstack ? "http://localhost:4566" : null
+        stepfunctions   = var.use_localstack ? "http://localhost:4566" : null
+        iam             = var.use_localstack ? "http://localhost:4566" : null
+        sns             = var.use_localstack ? "http://localhost:4566" : null
+        sqs             = var.use_localstack ? "http://localhost:4566" : null
     }
 }
 
@@ -34,7 +34,6 @@ resource "aws_s3_bucket" "output_videos_480p" {
     bucket = "video-compressor-480p"
 }
 
-
 # ------------------------------------------------------ #
 #                         DynamoDB                       #
 # ------------------------------------------------------ #
@@ -49,6 +48,90 @@ resource "aws_dynamodb_table" "video_metadata" {
     }
 }
 
+# ------------------------------------------------------ #
+#               SNS & SQS for notifications              #
+# ------------------------------------------------------ #
+resource "aws_sns_topic" "video_ingest_fanout" {
+    name = "video-ingest-fanout"
+}
+
+resource "aws_sns_topic_policy" "allow_s3_to_sns" {
+    arn    = aws_sns_topic.video_ingest_fanout.arn
+
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+            Effect = "Allow"
+            Principal = { Service = "s3.amazonaws.com" }
+            Action = "SNS:Publish"
+            Resource = aws_sns_topic.video_ingest_fanout.arn
+            Condition = {
+                ArnLike = {
+                    "aws:SourceArn" = aws_s3_bucket.input_videos_1080p
+                }
+            }
+        }]
+    })
+}
+
+resource "aws_s3_bucket_notification" "bucket_notification" {
+    bucket = aws_s3_bucket.input_videos_1080p.id
+
+    topic {
+        topic_arn = aws_sns_topic.video_ingest_fanout.arn
+        events    = ["s3:ObjectCreated:*"]
+    }
+
+    depends_on = [ aws_sns_topic_policy.allow_s3_to_sns ]
+}
+
+resource "aws_sqs_queue" "ffmpeg_processing_dlq" {
+    name = "ffmpeg-processing-dlq"  
+}
+
+resource "aws_sqs_queue" "ffmpeg_processing_queue" {
+    name = "ffmpeg-processing-queue"
+
+    redrive_policy = jsonencode({
+        deadLetterTargetArn = aws_sqs_queue.ffmpeg_processing_dlq.arn
+        maxReceiveCount     = 3
+    })
+}
+
+resource "aws_sqs_queue_policy" "allow_sns_to_sqs" {
+    queue_url = aws_sqs_queue.ffmpeg_processing_queue.id
+
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+            Effect = "Allow"
+            Principal = "*"
+            Action = "SQS:SendMessage"
+            Resource = aws_sqs_queue.ffmpeg_processing_queue.arn
+            Condition = {
+                ArnEquals = {
+                    "aws:SourceArn" = aws_sns_topic.video_ingest_fanout.arn
+                }
+            }
+        }]
+    })
+}
+
+resource "aws_sns_topic_subscription" "ingest_to_sqs" {
+    topic_arn = aws_sns_topic.video_ingest_fanout.arn
+    protocol  = "sqs"
+    endpoint  = aws_sqs_queue.ffmpeg_processing_queue.arn
+}
+
+resource "aws_sns_topic" "video_pipeline_alerts" {
+    name = "video-pipeline-alerts"
+}
+
+resource "aws_lambda_event_source_mapping" "sqs_to_lambda" {
+    event_source_arn  = aws_sqs_queue.ffmpeg_processing_queue.arn
+    function_name     = aws_lambda_function.lambda_trigger.arn
+    batch_size        = 1
+}
 
 # ------------------------------------------------------ #
 #                         IAM Roles                      #
@@ -182,6 +265,43 @@ resource "aws_iam_role_policy" "policy_trigger" {
     })
 }
 
+resource "aws_iam_role_policy" "policy_trigger_sqs" {
+    name   = "trigger-sqs-policy"
+    role   = aws_iam_role.trigger_role.id
+
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+            Action = [
+                "sqs:ReceiveMessage", 
+                "sqs:DeleteMessage", 
+                "sqs:GetQueueAttributes"
+            ]
+            Effect = "Allow"
+            Resource = aws_sqs_queue.ffmpeg_processing_queue.arn
+        }]
+    })
+}
+
+#                    Notification role                   #
+resource "aws_iam_role" "role_notification" {
+    name               = "role-lambda-notification"
+    assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+}
+
+resource "aws_iam_role_policy" "policy_notification" {
+    name = "policy-notification-sns"
+    role = aws_iam_role.role_notification.id
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+            Action   = "sns:Publish"
+            Effect   = "Allow"
+            Resource = aws_sns_topic.video_pipeline_alerts.arn
+        }]
+    })
+}
+
 # ------------------------------------------------------ #
 #                 Packing Lambda functions               #
 # ------------------------------------------------------ #
@@ -207,6 +327,12 @@ data "archive_file" "zip_lambda_trigger" {
     type        = "zip"
     source_dir  = "../src/lambda_trigger"
     output_path = "lambda_trigger.zip"
+}
+
+data "archive_file" "zip_notification" {
+    type        = "zip"
+    source_dir  = "../src/lambda_notification"
+    output_path = "lambda_notification.zip"
 }
 
 # ------------------------------------------------------ #
@@ -283,23 +409,20 @@ resource "aws_lambda_function" "lambda_trigger" {
     }
 }
 
-resource "aws_lambda_permission" "allow_s3" {
-    statement_id  = "AllowS3Invoke"
-    action        = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.lambda_trigger.function_name
-    principal     = "s3.amazonaws.com"
-    source_arn    = aws_s3_bucket.input_videos_1080p.arn
-}
-
-resource "aws_s3_bucket_notification" "bucket_notification" {
-    bucket = aws_s3_bucket.input_videos_1080p.id
-
-    lambda_function {
-        lambda_function_arn = aws_lambda_function.lambda_trigger.arn
-        events              = ["s3:ObjectCreated:*"]
+resource "aws_lambda_function" "lambda_notification" {
+    filename         = data.archive_file.zip_notification.output_path
+    source_code_hash = data.archive_file.zip_notification.output_base64sha256
+    function_name    = "send-notification"
+    role             = aws_iam_role.role_notification.arn
+    handler          = "app.handler"
+    runtime          = "python3.9"
+    
+    environment {
+        variables = {
+            SNS_TOPIC_ARN    = aws_sns_topic.video_pipeline_alerts.arn
+            AWS_ENDPOINT_URL = "http://localhost:4566"
+        }
     }
-
-    depends_on = [aws_lambda_permission.allow_s3]
 }
 
 # ------------------------------------------------------ #
@@ -313,16 +436,16 @@ resource "aws_sfn_state_machine" "video_pipeline_sfn" {
         StartAt = "ParallelProcessing"
         States = {
             "ParallelProcessing" = {
-                Type = "Parallel"
-                Next = "SaveMetadata"
+                Type     = "Parallel"
+                Next     = "SaveMetadata"
                 Branches = [
                     {
                         StartAt = "ConvertTo720p"
                         States = {
                             "ConvertTo720p" = {
-                                Type = "Task"
+                                Type     = "Task"
                                 Resource = aws_lambda_function.lambda_720p.arn
-                                End = true
+                                End      = true
                             }
                         }
                     },
@@ -330,19 +453,33 @@ resource "aws_sfn_state_machine" "video_pipeline_sfn" {
                         StartAt = "ConvertTo480p"
                         States = {
                             "ConvertTo480p" = {
-                                Type = "Task"
+                                Type     = "Task"
                                 Resource = aws_lambda_function.lambda_480p.arn
-                                End = true
+                                End      = true
                             }
                         }
                     }
                 ]
             },
             "SaveMetadata" = {
-                Type = "Task"
+                Type     = "Task"
                 Resource = aws_lambda_function.lambda_metadata.arn
-                End = true
+                Next     = "SendNotification"
+            },
+            "SendNotification" = {
+                Type     = "Task"
+                Resource = aws_lambda_function.lambda_notification.arn
+                End      = true
             }
         }
     })
+}
+
+# ------------------------------------------------------ #
+#                      SIMULATED EMAIL                   #
+# ------------------------------------------------------ #
+resource "aws_sns_topic_subscription" "email_subscription" {
+    topic_arn = aws_sns_topic.video_pipeline_alerts.arn
+    protocol = "email"
+    endpoint = "illescasnav@gmail.com"
 }
